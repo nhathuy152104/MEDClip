@@ -135,11 +135,18 @@ class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
         return encoded_inputs
 
     def pad_img(self, img, min_size=224, fill_color=0):
-        '''pad img to square.
-        '''
+        '''pad img to square.'''
+        # 1. Trích xuất con số nguyên (int) nếu min_size đang bị truyền vào là dict
+        if isinstance(min_size, dict):
+            # Lấy giá trị từ key 'shortest_edge' hoặc 'height', nếu không có mặc định là 224
+            min_size = min_size.get("shortest_edge", min_size.get("height", 224))
+            
         x, y = img.size
         size = max(min_size, x, y)
-        new_im = Image.new('L', (size, size), fill_color)
+        
+        # 2. Thay 'L' bằng img.mode để giữ nguyên hệ màu gốc của ảnh (RGB)
+        new_im = Image.new(img.mode, (size, size), fill_color)
+        
         new_im.paste(img, (int((size - x) / 2), int((size - y) / 2)))
         return new_im
 
