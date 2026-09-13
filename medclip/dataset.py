@@ -107,7 +107,7 @@ class MedCLIPImageProcessor(CLIPImageProcessor): # Đổi tên cho chuẩn ngữ
 
         if self.do_pad_square:
             images = [self.pad_img(image, min_size=self.raw_size) for image in images]
-        
+        images = [np.array(image) for image in images]
         if self.do_resize and self.raw_size is not None and self.resample is not None:
             # Truyền size theo dạng dictionary để tránh lỗi trên v5.0.0
             size_dict = {"height": self.raw_size, "width": self.raw_size}
