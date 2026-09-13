@@ -12,7 +12,7 @@ from torch import nn
 from torchvision import transforms
 
 from transformers import AutoTokenizer
-from transformers import CLIPFeatureExtractor, CLIPProcessor
+from transformers import CLIPImageProcessor, CLIPProcessor
 from transformers.utils import TensorType
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import is_torch_tensor
@@ -27,7 +27,7 @@ from .prompts import process_class_prompts, process_class_prompts_for_tuning
 from .prompts import generate_chexpert_class_prompts
 from . import constants
 
-class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
+class MedCLIPFeatureExtractor(CLIPImageProcessor):
     def __init__(self, 
         do_resize=True, 
         size=224, 
