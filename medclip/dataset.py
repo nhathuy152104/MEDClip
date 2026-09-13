@@ -102,7 +102,10 @@ class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
 
         # transformations (convert rgb + resizing + center cropping + normalization)
         if self.do_convert_rgb:
-            images = [self.convert_rgb(image) for image in images]
+            images = [
+                image.convert("RGB") if isinstance(image, Image.Image) else image 
+                for image in images
+            ]
 
         if self.do_pad_square:
             images = [self.pad_img(image,min_size=self.size) for image in images]
