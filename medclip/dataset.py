@@ -28,7 +28,7 @@ from .prompts import generate_chexpert_class_prompts
 from . import constants
 
 from transformers import CLIPImageProcessor, BatchFeature
-from transformers.image_utils import is_torch_tensor, TensorType
+from transformers.image_utils import is_torch_tensor
 from typing import Union, List, Optional
 from PIL import Image
 import numpy as np
