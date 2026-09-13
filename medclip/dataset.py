@@ -138,7 +138,7 @@ class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
         print(x,y)
         print(min_size)
         size = max(min_size, x, y)
-        new_im = Image.new('L', (size, size), fill_color)
+        new_im = Image.new(img.mode, (size, size), fill_color)
         new_im.paste(img, (int((size - x) / 2), int((size - y) / 2)))
         return new_im
 
