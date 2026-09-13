@@ -28,7 +28,7 @@ from .prompts import generate_chexpert_class_prompts
 from . import constants
 
 from transformers import CLIPImageProcessor, BatchFeature
-from transformers.image_utils import is_torch_tensor
+from transformers.image_utils import is_torch_tensor, to_numpy_array
 from typing import Union, List, Optional
 from PIL import Image
 import numpy as np
@@ -36,7 +36,7 @@ import numpy as np
 # Giữ nguyên constants của bạn ở trên
 # import constants
 
-class MedCLIPImageProcessor(CLIPImageProcessor): # Đổi tên cho chuẩn ngữ nghĩa bản mới
+class MedCLIPImageProcessor(CLIPImageProcessor):
     def __init__(self, 
         do_resize=True, 
         size=224, 
@@ -44,14 +44,13 @@ class MedCLIPImageProcessor(CLIPImageProcessor): # Đổi tên cho chuẩn ngữ
         do_center_crop=True, 
         crop_size=224, 
         do_normalize=True, 
-        image_mean=constants.IMG_MEAN, 
-        image_std=constants.IMG_STD, 
+        image_mean=None, # Thay bằng constants.IMG_MEAN của bạn
+        image_std=None,  # Thay bằng constants.IMG_STD của bạn
         do_convert_rgb=False,
         do_pad_square=True,
         **kwargs):
         
-        # Ở Transformers 5.x, size và crop_size ưu tiên dùng dict
-        # Chuyển đổi để tương thích an toàn với super().__init__
+        # Xử lý dict cho tương thích với Transformers 5.x
         size_dict = size if isinstance(size, dict) else {"shortest_edge": size}
         crop_size_dict = crop_size if isinstance(crop_size, dict) else {"height": crop_size, "width": crop_size}
 
@@ -67,8 +66,6 @@ class MedCLIPImageProcessor(CLIPImageProcessor): # Đổi tên cho chuẩn ngữ
             do_convert_rgb=do_convert_rgb, 
             **kwargs
         )
-        
-        # Lưu lại biến raw để dùng cho hàm pad_img và __call__
         self.do_pad_square = do_pad_square
         self.raw_size = size if isinstance(size, int) else size.get("shortest_edge", 224)
         self.raw_crop_size = crop_size if isinstance(crop_size, int) else crop_size.get("height", 224)
@@ -78,61 +75,58 @@ class MedCLIPImageProcessor(CLIPImageProcessor): # Đổi tên cho chuẩn ngữ
         return_tensors: Optional[Union[str, TensorType]] = None, 
         **kwargs) -> BatchFeature:
         
-        valid_images = False
-        if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
-            valid_images = True
-        elif isinstance(images, (list, tuple)):
-            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
-                valid_images = True
-
-        if not valid_images:
-            raise ValueError(
-                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
-                "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
-            )
-
+        # 1. Kiểm tra đầu vào
         is_batched = bool(
             isinstance(images, (list, tuple))
             and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
         )
-
         if not is_batched:
             images = [images]
 
-        # transformations
+        # 2. Convert sang RGB nếu cần
         if self.do_convert_rgb:
-            # Ghi chú: transformers bản mới đôi khi bỏ hàm self.convert_rgb
-            # An toàn nhất là gọi trực tiếp hàm convert nếu nó là PIL image
-            images = [img.convert("RGB") if isinstance(img, Image.Image) else img for img in images]
+            images = [image.convert("RGB") if isinstance(image, Image.Image) else image for image in images]
 
+        # 3. Padding ảnh vuông
         if self.do_pad_square:
             images = [self.pad_img(image, min_size=self.raw_size) for image in images]
-        images = [np.array(image) for image in images]
+        
+        # ==========================================
+        # QUAN TRỌNG: ÉP KIỂU SANG NUMPY ARRAY TRƯỚC KHI RESIZE
+        # Transformers v5 nội bộ yêu cầu numpy array có thuộc tính `.ndim`
+        # ==========================================
+        images = [to_numpy_array(image) for image in images]
+        
+        # 4. Resize
         if self.do_resize and self.raw_size is not None and self.resample is not None:
-            # Truyền size theo dạng dictionary để tránh lỗi trên v5.0.0
             size_dict = {"height": self.raw_size, "width": self.raw_size}
             images = [
                 self.resize(image=image, size=size_dict, resample=self.resample)
                 for image in images
             ]
             
+        # 5. Center Crop
         if self.do_center_crop and self.raw_crop_size is not None:
-            # Truyền crop_size theo dạng dictionary
             crop_size_dict = {"height": self.raw_crop_size, "width": self.raw_crop_size}
             images = [self.center_crop(image, size=crop_size_dict) for image in images]
             
+        # 6. Normalize
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
-        # add a RGB dim for each image if missing
+        # 7. Sắp xếp lại chiều dữ liệu thành (Channel, Height, Width) cho PyTorch
         images_ = []
         for image in images:
             if len(image.shape) == 2:
+                # Ảnh grayscale (H, W) -> (1, H, W)
                 image = image[None]
+            elif len(image.shape) == 3 and image.shape[-1] in [1, 3, 4]:
+                # Ảnh (H, W, C) -> (C, H, W) theo chuẩn PyTorch
+                image = image.transpose(2, 0, 1)
             images_.append(image)
         images = images_
 
-        # return as BatchFeature
+        # 8. Trả về định dạng chuẩn
         data = {"pixel_values": images}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
@@ -141,12 +135,13 @@ class MedCLIPImageProcessor(CLIPImageProcessor): # Đổi tên cho chuẩn ngữ
     def pad_img(self, img, min_size=224, fill_color=0):
         '''pad img to square.'''
         if not isinstance(img, Image.Image):
-            # Cần convert sang PIL nếu truyền vào np.ndarray hoặc tensor
-            # (tùy thuộc vào luồng data của bạn)
-            pass 
+            # Cần đảm bảo là PIL image ở bước này
+            return img 
+            
         x, y = img.size
         size = max(min_size, x, y)
-        new_im = Image.new('L', (size, size), fill_color)
+        # Sử dụng img.mode thay vì fix cứng 'L'
+        new_im = Image.new(img.mode, (size, size), fill_color)
         new_im.paste(img, (int((size - x) / 2), int((size - y) / 2)))
         return new_im
 
