@@ -101,11 +101,8 @@ class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
             images = [images]
 
         # transformations (convert rgb + resizing + center cropping + normalization)
-        if self.do_convert_rgb:
-            images = [
-                image.convert("RGB") if isinstance(image, Image.Image) else image 
-                for image in images
-            ]
+        # if self.do_convert_rgb:
+        #     images = [self.convert_rgb(image) for image in images]
 
         if self.do_pad_square:
             images = [self.pad_img(image,min_size=self.size) for image in images]
@@ -135,18 +132,11 @@ class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
         return encoded_inputs
 
     def pad_img(self, img, min_size=224, fill_color=0):
-        '''pad img to square.'''
-        # 1. Trích xuất con số nguyên (int) nếu min_size đang bị truyền vào là dict
-        if isinstance(min_size, dict):
-            # Lấy giá trị từ key 'shortest_edge' hoặc 'height', nếu không có mặc định là 224
-            min_size = min_size.get("shortest_edge", min_size.get("height", 224))
-            
+        '''pad img to square.
+        '''
         x, y = img.size
         size = max(min_size, x, y)
-        
-        # 2. Thay 'L' bằng img.mode để giữ nguyên hệ màu gốc của ảnh (RGB)
-        new_im = Image.new(img.mode, (size, size), fill_color)
-        
+        new_im = Image.new('L', (size, size), fill_color)
         new_im.paste(img, (int((size - x) / 2), int((size - y) / 2)))
         return new_im
 
