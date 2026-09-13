@@ -106,7 +106,7 @@ class MedCLIPFeatureExtractor(CLIPFeatureExtractor):
 
         if self.do_pad_square:
             images = [self.pad_img(image,min_size=self.size) for image in images]
-        
+        images = [np.array(image) for image in images]
         if self.do_resize and self.size is not None and self.resample is not None:
             images = [
                 self.resize(image=image, size=self.size, resample=self.resample)
